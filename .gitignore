@@ -1,0 +1,15 @@
+# Bảo mật token (chứa token thật)
+telegram.js
+test.html
+
+# Backup
+*.backup
+*.old
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
